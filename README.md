@@ -50,7 +50,7 @@ docker run --rm --env-file .env -p 8000:8000 --name quickbites-api quickbites-su
 
 Ensure `.env` includes `PORT=8000` when using `-p 8000:8000` so the app binds to the same port you publish (the image defaults `PORT` to 8000 if omitted).
 
-With Compose, the API is on **http://localhost:8000** and SQLite lives in the **`qb_sqlite`** volume at `data/app.db` inside the container. With `docker run` alone, the database file is ephemeral unless you add a volume (for example `-v quickbites-data:/app/data` and set `DATABASE_PATH=data/app.db` in `.env`).
+With Compose or `docker run`, the API is on **http://localhost:8000** and uses the **baked-in `app.db`** from the image (repo root). Runtime changes to the DB are kept only for the lifetime of that container unless you bind-mount a file (for example `-v "$(pwd)/app.db:/app/app.db"`).
 
 ---
 
