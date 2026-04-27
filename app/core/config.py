@@ -1,7 +1,9 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,10 +23,26 @@ class Settings(BaseSettings):
     # Database path (relative to project root)
     database_path: str = "app.db"
 
-    # Server
+    # Server (Railway, Render, Fly, etc. inject PORT; keep in sync with uvicorn bind)
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = Field(default=8000, ge=1, le=65535)
     debug: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _port_from_port_env(cls, data: Any) -> Any:
+        """Prefer the platform PORT env var when the caller did not set `port` explicitly."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("port") is not None:
+            return data
+        raw = os.environ.get("PORT", "").strip()
+        if not raw:
+            return data
+        try:
+            return {**data, "port": int(raw)}
+        except ValueError:
+            return data
 
     # Agent
     max_turns: int = 8
