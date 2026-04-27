@@ -27,6 +27,15 @@ The server starts at `http://localhost:8000`.
 - API docs: `http://localhost:8000/docs`
 - Health: `http://localhost:8000/api/v1/healthz`
 
+### Docker
+
+```bash
+cp .env.example .env  # add ANTHROPIC_API_KEY and other vars
+docker compose up --build
+```
+
+The API is exposed on port 8000. SQLite is stored in a named volume at `data/app.db` inside the container.
+
 ---
 
 ## Run a dev session

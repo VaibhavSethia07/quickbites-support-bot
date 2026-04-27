@@ -37,21 +37,22 @@ POST /v1/session/{id}/reply ──► Simulator
 
 ### Components
 
-| Component | File | Responsibility |
-|---|---|---|
-| FastAPI app | `main.py` | Entry point, lifespan events, CORS |
-| Session runner | `app/services/simulator.py` | Drives conversation loop; calls simulator API |
-| LangGraph graph | `app/agent/graph.py` | Compiles and exposes the agent |
-| gather_context node | `app/agent/nodes/gather_context.py` | Extracts order_id; queries 8 SQL tables |
-| assess_risk node | `app/agent/nodes/assess_risk.py` | Rule-based abuse scoring (no LLM) |
-| decide node | `app/agent/nodes/decide.py` | LLM call; action validation; refund cap enforcement |
-| Database repo | `app/repositories/database.py` | All SQL queries |
-| Policy RAG | `app/services/rag.py` | FAISS index over policy_and_faq.md sections |
-| Prompts | `app/prompts/support_agent.py` | System prompt builder; tool schema |
+| Component           | File                                | Responsibility                                      |
+| ------------------- | ----------------------------------- | --------------------------------------------------- |
+| FastAPI app         | `main.py`                           | Entry point, lifespan events, CORS                  |
+| Session runner      | `app/services/simulator.py`         | Drives conversation loop; calls simulator API       |
+| LangGraph graph     | `app/agent/graph.py`                | Compiles and exposes the agent                      |
+| gather_context node | `app/agent/nodes/gather_context.py` | Extracts order_id; queries 8 SQL tables             |
+| assess_risk node    | `app/agent/nodes/assess_risk.py`    | Rule-based abuse scoring (no LLM)                   |
+| decide node         | `app/agent/nodes/decide.py`         | LLM call; action validation; refund cap enforcement |
+| Database repo       | `app/repositories/database.py`      | All SQL queries                                     |
+| Policy RAG          | `app/services/rag.py`               | FAISS index over policy_and_faq.md sections         |
+| Prompts             | `app/prompts/support_agent.py`      | System prompt builder; tool schema                  |
 
 ### What the LLM does and doesn't do
 
 **LLM does:**
+
 - Understand the natural-language complaint
 - Synthesise multi-source evidence into a resolution decision
 - Write the customer-facing response
@@ -59,6 +60,7 @@ POST /v1/session/{id}/reply ──► Simulator
 - Determine when to close, escalate, or push back
 
 **LLM does NOT:**
+
 - Compute the risk score (rule-based, deterministic)
 - Query the database (pre-fetched by `gather_context`)
 - Choose a refund amount above the policy ceiling (post-LLM clamp)
@@ -72,16 +74,17 @@ POST /v1/session/{id}/reply ──► Simulator
 
 I followed the policy document literally but extended it with concrete thresholds derived from data inspection:
 
-| Signal | Threshold | Action |
-|---|---|---|
-| Complaint rate (5+ orders) | ≥ 80% | +0.40 risk |
-| Complaint rate (5+ orders) | ≥ 50% | +0.20 risk |
-| Rejected complaints | ≥ 3 | +0.25 risk |
-| Account age vs complaint count | <30 days + ≥2 complaints | +0.30 risk |
-| Recent refund count (30 days) | ≥ 4 refunds | +0.30 risk |
-| Non-delivery claim on delivered order + clean rider | — | +0.25 risk |
+| Signal                                              | Threshold                | Action     |
+| --------------------------------------------------- | ------------------------ | ---------- |
+| Complaint rate (5+ orders)                          | ≥ 80%                    | +0.40 risk |
+| Complaint rate (5+ orders)                          | ≥ 50%                    | +0.20 risk |
+| Rejected complaints                                 | ≥ 3                      | +0.25 risk |
+| Account age vs complaint count                      | <30 days + ≥2 complaints | +0.30 risk |
+| Recent refund count (30 days)                       | ≥ 4 refunds              | +0.30 risk |
+| Non-delivery claim on delivered order + clean rider | —                        | +0.25 risk |
 
 **Risk tiers:**
+
 - **Low** (< 0.35): Full order value available as refund ceiling; wallet_credit preferred
 - **Medium** (0.35–0.65): 50% of order total maximum; wallet_credit only; borderline cases escalated
 - **High** (≥ 0.65): No refund; escalate to human; flag_abuse if pattern is clear
@@ -152,13 +155,13 @@ Every action returned by the LLM is passed through `parse_action()` which uses P
 
 I ran all 5 rehearsal scenarios (101–105) multiple times during development. Key findings:
 
-| Scenario | Issue | Bot behaviour | Fixed? |
-|---|---|---|---|
-| 101 (cold food) | Bot said "I'll issue ₹400" without including the action | Refund never recorded by simulator | Yes — updated prompt to require same-turn action |
-| 102 (rider rudeness) | — | Correctly filed rider complaint, no refund (customer didn't ask), closed cleanly | — |
-| 103 (partial-missing + chargeback threat) | Correctly escalated high-risk customer | Context showed inflated "rejected_complaints" due to SQL cross-join bug | Yes — rewrote query as correlated subquery |
-| 104 (injection + false claim) | Extracted ₹3000 as order ID from injection payload; bot got stuck in loop | Blocked all subsequent real messages | Yes — currency stripping + injection-aware number extractor |
-| 105 (vague complaint) | Correct outcome but post-escalation turns were handled inconsistently | Closed after customer accepted partial refund | — |
+| Scenario                                  | Issue                                                                     | Bot behaviour                                                                    | Fixed?                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 101 (cold food)                           | Bot said "I'll issue ₹400" without including the action                   | Refund never recorded by simulator                                               | Yes — updated prompt to require same-turn action            |
+| 102 (rider rudeness)                      | —                                                                         | Correctly filed rider complaint, no refund (customer didn't ask), closed cleanly | —                                                           |
+| 103 (partial-missing + chargeback threat) | Correctly escalated high-risk customer                                    | Context showed inflated "rejected_complaints" due to SQL cross-join bug          | Yes — rewrote query as correlated subquery                  |
+| 104 (injection + false claim)             | Extracted ₹3000 as order ID from injection payload; bot got stuck in loop | Blocked all subsequent real messages                                             | Yes — currency stripping + injection-aware number extractor |
+| 105 (vague complaint)                     | Correct outcome but post-escalation turns were handled inconsistently     | Closed after customer accepted partial refund                                    | —                                                           |
 
 ### Failure modes found and fixed
 
